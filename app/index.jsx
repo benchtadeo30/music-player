@@ -1,133 +1,81 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { ImageBackground, Image } from 'expo-image';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import bg from '../assets/intro.gif';
-import Logo from '../assets/waveform.svg';
-import snowy from '../assets/snowy.png';
-
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import benjieBackgroundGif from '../assets/benjie_bg_loop.gif';
+import benjieGif from '../assets/benjie.gif';
 
-export default function index() {
+// Benjie's GIF has 12 frames at 80 ms each (960 ms per run cycle).
+// Three run cycles match the full progress-bar travel and intro duration.
+const INTRO_DURATION_MS = 2880;
+
+export default function Index() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const [loadingProgress] = useState(() => new Animated.Value(0));
+  const [loadingDots, setLoadingDots] = useState(0);
+  const progressWidth = Math.max(150, Math.min(width - 112, 280));
+  const characterTravel = Math.max(0, progressWidth - 122);
+  const fillWidth = loadingProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, progressWidth],
+  });
+  const benjiePosition = loadingProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, characterTravel],
+  });
+
+  useEffect(() => {
+    const loadingAnimation = Animated.timing(loadingProgress, {
+      toValue: 1,
+      duration: INTRO_DURATION_MS,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    loadingAnimation.start();
+    const dotsTimer = setInterval(() => {
+      setLoadingDots((currentDots) => (currentDots + 1) % 4);
+    }, 350);
+    const redirectTimer = setTimeout(() => router.replace('/Music'), INTRO_DURATION_MS);
+
+    return () => {
+      loadingAnimation.stop();
+      clearInterval(dotsTimer);
+      clearTimeout(redirectTimer);
+    };
+  }, [loadingProgress]);
 
   return (
-    <ImageBackground
-  source={bg}
-  contentFit="fill"
-  style={styles.background}
->
+    <View style={styles.screen}>
       <StatusBar hidden />
-      <ScrollView
-        style={styles.contentScroll}
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 },
-        ]}
-        contentInsetAdjustmentBehavior="never"
-        bounces={false}
-      >
-        <Logo width={80} height={80} style={styles.logo} />
-        <Text style={styles.title}>Music</Text>
-        <Text style={styles.title}>for every mood</Text>
-        <Text style={styles.description}>
-          Discover, play and enjoy{ '\n' }
-          your favorite music,{ '\n' }
-          podcasts and more.
-        </Text>
-        <Pressable
-          onPress={() => router.push('/Login')}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-          <Image source={snowy} contentFit="contain" style={styles.santaHat} />
-        </Pressable>
-      </ScrollView>
-    </ImageBackground>
+      <Image source={benjieBackgroundGif} contentFit="cover" autoplay isAnimated style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={styles.tint} />
+
+      <View style={[styles.loadingContent, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <Text style={styles.loadingLabel}>Loading{'.'.repeat(loadingDots)}</Text>
+        <View style={[styles.progressArea, { width: progressWidth }]}>
+          <Animated.View style={[styles.character, { transform: [{ translateX: benjiePosition }] }]}>
+            <Image source={benjieGif} contentFit="contain" autoplay isAnimated style={styles.benjieImage} />
+          </Animated.View>
+          <View style={styles.progressTrack}>
+            <Animated.View style={[styles.progressFill, { width: fillWidth }]} />
+          </View>
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-    width: '100%',
-  },
-  contentScroll: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  logo: {
-  shadowColor: '#3985ff',
-  shadowOffset: { width: 0, height: 0 },
-  shadowOpacity: 1,
-  shadowRadius: 25,
-  elevation: 20,
-},
-  title: {
-    color: '#fff',
-    fontFamily: 'NunitoExtraBold',
-    fontSize: 30,
-    lineHeight: 35,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 5,
-  },
-  description: {
-    color: '#fff',
-    fontFamily: 'NunitoSemiBold',
-    fontSize: 15,
-    lineHeight: 21,
-    marginTop: 12,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  button: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 204,
-    height: 48,
-    marginTop: 32,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: '#f5e8d7',
-    backgroundColor: '#c51c25',
-    elevation: 9,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-  },
-  buttonPressed: {
-    opacity: 0.88,
-    elevation: 3,
-    transform: [{ scale: 0.96 }],
-  },
-  santaHat: {
-    position: 'absolute',
-    width: '100%',
-    height: 68,
-    top: -30,
-    right: -5,
-    transform: [{ scale: 1.25 }],
-    shadowColor: '#fff3a8',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.95,
-    shadowRadius: 22,
-    elevation: 16,
-  },
-  buttonText: {
-    color: '#fff',
-    fontFamily: 'NunitoExtraBold',
-    fontSize: 15,
-  },
+  screen: { flex: 1, overflow: 'hidden', backgroundColor: '#073c2c' },
+  tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 24, 16, 0.16)' },
+  loadingContent: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingLabel: { color: '#fff8e9', fontFamily: 'NunitoExtraBold', fontSize: 20, textAlign: 'center', marginBottom: 8 },
+  progressArea: { height: 102, justifyContent: 'flex-end', paddingBottom: 18 },
+  character: { position: 'absolute', left: 0, bottom: 18, width: 122, height: 82 },
+  benjieImage: { width: '100%', height: '100%' },
+  progressTrack: { width: '100%', height: 9, overflow: 'hidden', borderRadius: 6, backgroundColor: 'rgba(255, 245, 231, 0.48)' },
+  progressFill: { height: '100%', borderRadius: 6, backgroundColor: '#d92332' },
 });

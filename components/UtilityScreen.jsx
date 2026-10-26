@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -8,73 +8,105 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Image, ImageBackground } from 'expo-image';
+import { ImageBackground } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import christmasBackground from '../assets/christmas_bg4.png';
-import greenChristmas from '../assets/christmas_bg.png';
-import redChristmas from '../assets/christmas_bg2.png';
-import snowyChristmas from '../assets/christmas_bg3.png';
+import { usePlayback } from './PlaybackContext';
+import SongArtwork from './SongArtwork';
+import { getUserAlbums } from './userAlbums';
+import { useFavorites } from './FavoritesContext';
+import { buildAlbums } from './albumLibrary';
 
-const searchCategories = ['All', 'Music', 'Podcast'];
-const libraryCategories = ['Playlists', 'Artists', 'Albums', 'Podcasts'];
-
-const searchItems = [
-  { title: 'Midnights', subtitle: 'Taylor Swift • Album', type: 'Music', image: redChristmas },
-  { title: 'SOS', subtitle: 'SZA • Album', type: 'Music', image: greenChristmas },
-  { title: 'Un Verano Sin Ti', subtitle: 'Bad Bunny • Album', type: 'Music', image: snowyChristmas },
-  { title: 'IGOR', subtitle: 'Tyler, The Creator • Album', type: 'Music', image: redChristmas },
-  { title: 'Ctrl', subtitle: 'SZA • Album', type: 'Music', image: greenChristmas },
-  { title: 'The Joe Rogan Experience', subtitle: 'Joe Rogan • Podcast', type: 'Podcast', image: greenChristmas },
-  { title: 'Call Her Daddy', subtitle: 'Alex Cooper • Podcast', type: 'Podcast', image: redChristmas },
-  { title: 'TED Talks Daily', subtitle: 'TED • Podcast', type: 'Podcast', image: snowyChristmas },
-  { title: 'Hardcore', subtitle: 'Dan Carlin • Podcast', type: 'Podcast', image: greenChristmas },
-];
-
-const savedItems = {
-  Playlists: [
-    { title: 'Liked Songs', subtitle: 'Playlist • 42 songs', image: redChristmas },
-    { title: 'Christmas Favorites', subtitle: 'Playlist • 18 songs', image: greenChristmas },
-    { title: 'Late Night Listening', subtitle: 'Playlist • 26 songs', image: snowyChristmas },
-  ],
-  Artists: [
-    { title: 'SZA', subtitle: 'Artist', image: greenChristmas },
-    { title: 'Taylor Swift', subtitle: 'Artist', image: redChristmas },
-    { title: 'Bad Bunny', subtitle: 'Artist', image: snowyChristmas },
-  ],
-  Albums: [
-    { title: 'Midnights', subtitle: 'Taylor Swift • Album', image: redChristmas },
-    { title: 'SOS', subtitle: 'SZA • Album', image: greenChristmas },
-    { title: 'Un Verano Sin Ti', subtitle: 'Bad Bunny • Album', image: snowyChristmas },
-    { title: 'Ctrl', subtitle: 'SZA • Album', image: greenChristmas },
-  ],
-  Podcasts: [
-    { title: 'The Joe Rogan Experience', subtitle: 'Joe Rogan • Podcast', image: greenChristmas },
-    { title: 'Call Her Daddy', subtitle: 'Alex Cooper • Podcast', image: redChristmas },
-    { title: 'TED Talks Daily', subtitle: 'TED • Podcast', image: snowyChristmas },
-  ],
-};
+const searchCategories = ['All', 'Songs', 'Albums'];
+const libraryCategories = ['Favorites', 'Songs', 'Albums'];
 
 export default function UtilityScreen({ page }) {
+  const params = useLocalSearchParams();
+  const query = typeof params.query === 'string' ? params.query : '';
+  const category = typeof params.category === 'string' ? params.category : '';
+  const requestId = typeof params.requestId === 'string' ? params.requestId : '';
+  return <UtilityContent key={JSON.stringify([page, query, category, requestId])} page={page} initialQuery={query} initialCategory={category} />;
+}
+
+function UtilityContent({ page, initialQuery, initialCategory }) {
   const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState('');
-  const [searchCategory, setSearchCategory] = useState('All');
-  const [libraryCategory, setLibraryCategory] = useState('Playlists');
+  const [query, setQuery] = useState(initialQuery);
+  const [searchCategory, setSearchCategory] = useState(searchCategories.includes(initialCategory) ? initialCategory : 'All');
+  const [libraryCategory, setLibraryCategory] = useState(libraryCategories.includes(initialCategory) ? initialCategory : 'Songs');
+  const [selectedLibraryAlbumId, setSelectedLibraryAlbumId] = useState(null);
+  const [savedAlbums, setSavedAlbums] = useState([]);
   const isSearch = page === 'Search';
+  const { libraryId, playTrack, tracks } = usePlayback();
+  const { favoriteTrackIds, favoriteAlbumIds } = useFavorites();
+  useEffect(() => {
+    let isMounted = true;
+    getUserAlbums(libraryId).then((userAlbums) => {
+      if (isMounted) setSavedAlbums(userAlbums);
+    });
+    return () => { isMounted = false; };
+  }, [libraryId]);
+  const libraryAlbums = useMemo(() => buildAlbums(tracks), [tracks]);
+  const albumItems = useMemo(() => [
+    ...savedAlbums.map((album) => {
+      const albumTracks = album.trackIds.map((id) => tracks.find((track) => track.id === id)).filter(Boolean);
+      const songCount = `${albumTracks.length} song${albumTracks.length === 1 ? '' : 's'}`;
+      const albumWithTracks = { ...album, tracks: albumTracks, detail: songCount };
+      return {
+        id: album.id,
+        title: albumWithTracks.title,
+        subtitle: `Playlist · ${songCount}`,
+        type: 'Album',
+        image: albumWithTracks.artworkUri ? { uri: albumWithTracks.artworkUri } : null,
+        album: albumWithTracks,
+      };
+    }),
+    ...libraryAlbums.map((album) => ({
+      id: album.id,
+      title: album.title,
+      subtitle: `${album.artist} · ${album.detail}`,
+      type: 'Album',
+      image: album.artwork,
+      album,
+    })),
+  ], [savedAlbums, libraryAlbums, tracks]);
+  const searchableItems = useMemo(() => [
+    ...tracks.map((track) => ({ id: track.id, title: track.title, subtitle: `${track.artist} - Song`, type: 'Music', image: track.artwork, track })),
+    ...albumItems,
+  ], [albumItems, tracks]);
+  const libraryItems = {
+    Favorites: [
+      ...tracks.filter((track) => favoriteTrackIds.includes(track.id)).map((track) => ({ id: track.id, title: track.title, subtitle: `${track.artist} - Song`, type: 'Music', image: track.artwork, track })),
+      ...albumItems.filter((album) => favoriteAlbumIds.includes(album.id)),
+    ],
+    Songs: tracks.map((track) => ({ id: track.id, title: track.title, subtitle: `${track.artist} - Song`, type: 'Music', image: track.artwork, track })),
+    Albums: albumItems,
+  };
 
   const results = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    return searchItems.filter((item) => {
-      const matchesCategory = searchCategory === 'All' || item.type === searchCategory;
+    return searchableItems.filter((item) => {
+      const matchesCategory = searchCategory === 'All'
+        || (searchCategory === 'Songs' && item.type === 'Music')
+        || (searchCategory === 'Albums' && item.type === 'Album');
       const matchesQuery = !normalizedQuery
         || `${item.title} ${item.subtitle}`.toLocaleLowerCase().includes(normalizedQuery);
       return matchesCategory && matchesQuery;
     });
-  }, [query, searchCategory]);
+  }, [query, searchCategory, searchableItems]);
 
-  const items = isSearch ? results : savedItems[libraryCategory];
+  const selectedLibraryAlbum = albumItems.find((item) => item.id === selectedLibraryAlbumId);
+  const albumTracks = selectedLibraryAlbum?.album.tracks.map((track) => ({
+    id: track.id,
+    title: track.title,
+    subtitle: `${track.artist} - Song`,
+    type: 'Music',
+    image: track.artwork,
+    track,
+  }));
+  const items = isSearch ? results : albumTracks ?? libraryItems[libraryCategory];
 
   return (
     <ImageBackground source={christmasBackground} contentFit="cover" style={styles.background}>
@@ -84,12 +116,12 @@ export default function UtilityScreen({ page }) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to previous screen"
-            onPress={() => router.back()}
+            onPress={() => selectedLibraryAlbum ? setSelectedLibraryAlbumId(null) : router.back()}
             style={styles.backButton}
           >
             <Ionicons name="chevron-back" size={25} color={COLORS.ink} />
           </Pressable>
-          <Text style={styles.heading}>{isSearch ? 'Search' : 'Your Library'}</Text>
+          <Text numberOfLines={1} style={styles.heading}>{isSearch ? 'Search' : selectedLibraryAlbum?.title ?? 'Your Library'}</Text>
         </View>
 
         {isSearch ? (
@@ -97,7 +129,7 @@ export default function UtilityScreen({ page }) {
             <View style={styles.searchBox}>
               <Ionicons name="search-outline" size={20} color={COLORS.green} />
               <TextInput
-                accessibilityLabel="Search music and podcasts"
+              accessibilityLabel="Search songs and albums"
                 value={query}
                 onChangeText={setQuery}
                 placeholder="What do you want to listen to?"
@@ -137,25 +169,24 @@ export default function UtilityScreen({ page }) {
             <Text style={styles.sectionTitle}>
               {query.trim()
                 ? 'Search results'
-                : searchCategory === 'Podcast'
-                  ? 'Podcasts'
-                  : searchCategory === 'Music'
-                    ? 'Albums'
-                    : 'Browse music'}
+                : searchCategory === 'Songs' ? 'Songs' : searchCategory === 'Albums' ? 'Albums' : 'Browse music'}
             </Text>
             {query.trim() || searchCategory !== 'All' ? (
-              <ItemList items={items} bottomInset={insets.bottom} />
+              <ItemList items={items} bottomInset={insets.bottom} onSelect={(item) => {
+                if (item.track) { playTrack(item.track); router.push('/Player'); }
+                else router.push({ pathname: '/Albums', params: { albumId: item.id } });
+              }} />
             ) : (
               <View style={styles.browseCards}>
                 <Pressable accessibilityRole="button" onPress={() => router.push('/Albums')} style={[styles.browseCard, styles.musicCard]}>
-                  <Text style={styles.browseCardTitle}>Music</Text>
-                  <Text style={styles.browseCardSubtitle}>Browse albums</Text>
+                  <Text style={styles.browseCardTitle}>Albums</Text>
+                  <Text style={styles.browseCardSubtitle}>Browse by album</Text>
                   <Ionicons name="musical-notes" size={42} color="#fff8e9" style={styles.browseIcon} />
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={() => router.push('/Podcasts')} style={[styles.browseCard, styles.podcastCard]}>
-                  <Text style={styles.browseCardTitle}>Podcasts</Text>
-                  <Text style={styles.browseCardSubtitle}>Find a show</Text>
-                  <Ionicons name="mic" size={40} color="#fff8e9" style={styles.browseIcon} />
+                <Pressable accessibilityRole="button" onPress={() => router.push('/Library')} style={[styles.browseCard, styles.musicCard]}>
+                  <Text style={styles.browseCardTitle}>Songs</Text>
+                  <Text style={styles.browseCardSubtitle}>Browse your music</Text>
+                  <Ionicons name="headset" size={40} color="#fff8e9" style={styles.browseIcon} />
                 </Pressable>
               </View>
             )}
@@ -168,7 +199,7 @@ export default function UtilityScreen({ page }) {
               contentContainerStyle={styles.libraryFilters}
               style={styles.libraryFilterScroll}
             >
-              {libraryCategories.map((category) => {
+              {!selectedLibraryAlbum ? libraryCategories.map((category) => {
                 const selected = libraryCategory === category;
                 return (
                   <Pressable
@@ -181,11 +212,17 @@ export default function UtilityScreen({ page }) {
                     <Text style={[styles.filterLabel, selected && styles.filterLabelSelected]}>{category}</Text>
                   </Pressable>
                 );
-              })}
+              }) : null}
             </ScrollView>
             <View style={styles.librarySection}>
-              <Text style={[styles.sectionTitle, styles.librarySectionTitle]}>Recently played</Text>
-              <ItemList items={items} bottomInset={insets.bottom} compact />
+              <Text style={[styles.sectionTitle, styles.librarySectionTitle]}>
+                {selectedLibraryAlbum ? selectedLibraryAlbum.subtitle : libraryCategory === 'Albums' ? 'Your albums' : libraryCategory === 'Favorites' ? 'Favorites' : 'Your songs'}
+              </Text>
+              <ItemList items={items} bottomInset={insets.bottom} compact emptyMessage={libraryCategory === 'Favorites' ? 'No favorites yet. Tap a heart on a song or album to save it here.' : 'No music here yet. Add songs in Settings.'} onSelect={(item) => {
+                if (item.track) { playTrack(item.track); router.push('/Player'); }
+                else if (item.album) router.push({ pathname: '/Albums', params: { albumId: item.id } });
+                else router.push('/Albums');
+              }} />
             </View>
           </>
         )}
@@ -201,7 +238,7 @@ export default function UtilityScreen({ page }) {
   );
 }
 
-function ItemList({ items, bottomInset, compact = false }) {
+function ItemList({ items, bottomInset, compact = false, onSelect, emptyMessage }) {
   return (
     <ScrollView
       contentContainerStyle={[
@@ -214,8 +251,8 @@ function ItemList({ items, bottomInset, compact = false }) {
       keyboardShouldPersistTaps="handled"
     >
       {items.length > 0 ? items.map((item) => (
-        <Pressable key={`${item.title}-${item.subtitle}`} accessibilityRole="button" style={[styles.itemRow, compact && styles.compactItemRow]}>
-          <Image source={item.image} contentFit="cover" style={[styles.itemArt, compact && styles.compactItemArt]} />
+        <Pressable key={`${item.title}-${item.subtitle}`} accessibilityRole="button" onPress={() => onSelect?.(item)} style={[styles.itemRow, compact && styles.compactItemRow]}>
+          <SongArtwork source={item.image} style={[styles.itemArt, compact && styles.compactItemArt]} iconSize={22} />
           <View style={styles.itemDetails}>
             <Text numberOfLines={1} style={styles.itemTitle}>{item.title}</Text>
             <Text numberOfLines={1} style={styles.itemSubtitle}>{item.subtitle}</Text>
@@ -223,7 +260,7 @@ function ItemList({ items, bottomInset, compact = false }) {
           <Ionicons name="chevron-forward" size={19} color={COLORS.green} />
         </Pressable>
       )) : (
-        <Text style={styles.emptyMessage}>No results found. Try another search.</Text>
+        <Text style={styles.emptyMessage}>{emptyMessage ?? (compact ? 'No music here yet. Add songs in Settings.' : 'No results found. Try another search.')}</Text>
       )}
     </ScrollView>
   );
@@ -298,7 +335,6 @@ const styles = StyleSheet.create({
   compactItemRow: { minHeight: 56, gap: 10, paddingVertical: 3 },
   itemArt: { width: 54, height: 54, borderRadius: 8, backgroundColor: '#d9c7a4' },
   compactItemArt: { width: 46, height: 46 },
-  compactItemArt: { width: 46, height: 46 },
   itemDetails: { flex: 1, minWidth: 0 },
   itemTitle: { color: COLORS.ink, fontFamily: 'NunitoExtraBold', fontSize: 14 },
   itemSubtitle: { color: '#5c554a', fontFamily: 'NunitoSemiBold', fontSize: 12 },
@@ -306,7 +342,6 @@ const styles = StyleSheet.create({
   browseCards: { flexDirection: 'row', gap: 12, paddingHorizontal: 18 },
   browseCard: { flex: 1, minHeight: 132, justifyContent: 'flex-end', overflow: 'hidden', padding: 14, borderRadius: 15 },
   musicCard: { backgroundColor: COLORS.green },
-  podcastCard: { backgroundColor: '#a12b2a' },
   browseCardTitle: { color: COLORS.cream, fontFamily: 'NunitoExtraBold', fontSize: 17 },
   browseCardSubtitle: { color: COLORS.cream, fontFamily: 'NunitoSemiBold', fontSize: 11 },
   browseIcon: { position: 'absolute', right: 11, top: 12, opacity: 0.82 },

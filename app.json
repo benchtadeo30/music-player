@@ -11,6 +11,9 @@
       "supportsTablet": true
     },
     "android": {
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/icon.png",
@@ -18,7 +21,7 @@
         "monochromeImage": "./assets/icon.png"
       },
       "package": "com.benchtadeo30steam.musicplayer",
-      "versionCode": 2 
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,7 +35,14 @@
           ]
         }
       ],
-      "expo-image"
+      "expo-image",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "expo-router"
     ],
     "extra": {
       "eas": {
